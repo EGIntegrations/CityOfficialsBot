@@ -9,3 +9,4 @@ faiss-cpu
 python-dotenv
 pypdf
 tiktoken
+toktoken
