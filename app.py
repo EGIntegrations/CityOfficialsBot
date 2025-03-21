@@ -11,7 +11,18 @@ load_dotenv()
 @st.cache_resource
 def load_chain():
     embeddings = OpenAIEmbeddings()
-    vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    
+   if not os.path.exists("faiss_index"):
+        # Generate embeddings dynamically from PDF
+        loader = PyPDFLoader("ordinances.pdf")
+        documents = loader.load()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+        docs = text_splitter.split_documents(documents)
+        vectorstore = FAISS.from_documents(docs, embeddings)
+        vectorstore.save_local("faiss_index")
+   else:
+        vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+       
     custom_template = """
     You are an Ozark City Ordinances chatbot. Answer ONLY questions about city ordinances. 
     Politely refuse to answer unrelated topics. Keep responses accurate, short, and specific.
