@@ -1,0 +1,49 @@
+import streamlit as st
+from dotenv import load_dotenv
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import FAISS
+from langchain.chat_models import ChatOpenAI
+from langchain.chains import ConversationalRetrievalChain
+from langchain.prompts import PromptTemplate
+
+load_dotenv()
+
+@st.cache_resource
+def load_chain():
+    embeddings = OpenAIEmbeddings()
+    vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    custom_template = """
+    You are an Ozark City Ordinances chatbot. Answer ONLY questions about city ordinances. 
+    Politely refuse to answer unrelated topics. Keep responses accurate, short, and specific.
+
+    Context:
+    {context}
+
+    Question:
+    {question}
+
+    Answer:
+    """
+
+    custom_prompt = PromptTemplate(template=custom_template, input_variables=["context", "question"])
+    llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
+
+    return ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=vectorstore.as_retriever(),
+        combine_docs_chain_kwargs={'prompt': custom_prompt}
+    )
+
+chain = load_chain()
+
+if 'history' not in st.session_state:
+    st.session_state.history = []
+
+st.title("📖 Ozark City Ordinances Assistant")
+user_question = st.text_input("Ask a question about city ordinances:")
+
+if st.button("Ask"):
+    if user_question:
+        response = chain({"question": user_question, "chat_history": st.session_state.history})
+        st.write("🤖", response["answer"])
+        st.session_state.history.append((user_question, response["answer"]))
