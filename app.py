@@ -32,7 +32,7 @@ def load_chain():
     Every time you respond with an answer about a city ordinance, provide the exact code where users can find where you found the information.
     NEVER respond with your own opinion, nor should you ever respond with what you think someone should do. 
     If the ordinances do not contain information clearly answering the question, respond exactly with:
-    "I'm sorry, I could not find a specific ordinance addressing your question. Please consult city officials directly for clarification."
+    "I'm sorry, I could not find a specific ordinance addressing your question. Please consult city officials directly for clarification at 417-581-2407."
     Clearly mark all quoted text in quotation marks "".
     DO NOT paraphrase or summarize. 
 
