@@ -1,39 +1,53 @@
 
-⸻
+# 🏛️ City Officials Ordinance Reference Bot
 
-# 📖 Ozark City Ordinance Chatbot
-
-This chatbot assists citizens by providing direct quotations from Ozark City ordinances. It is explicitly restricted to quote ordinance text to ensure accuracy and legality.
-
-## 🚀 Quick Overview
-
-- **Strictly ordinance-specific responses** (quotes ONLY, no opinions).
-- Built with Python, LangChain, OpenAI, FAISS, and Streamlit.
-- Easy integration into the City of Ozark website.
+This chatbot assists city officials in quickly and accurately referencing and comparing ordinances from multiple municipalities. It strictly provides direct quotations along with useful metadata, such as the ordinance timestamp, category, and surrounding context.
 
 ---
 
-## 🛠 Local Setup (Step-by-Step)
+## 🚩 **Key Features:**
 
-**Clone this repo locally:**
+- **Direct Quotations Only:** No opinions, interpretations, or paraphrasing.
+- **Metadata Enhanced Responses:** Timestamp, category, and surrounding context provided clearly.
+- **Multiple City Ordinances:** Easily compare ordinances across different cities.
+
+---
+
+## 📂 **Repository Structure:**
+
+CityOfficialsBot/
+├── ordinances/              # PDFs from multiple cities
+├── app.py                   # Streamlit chatbot application
+├── prepare_pdf.py           # Script to generate embeddings with metadata
+├── requirements.txt         # Dependencies with explicit versions
+├── runtime.txt              # Python runtime specification (3.11.7)
+└── README.md
+
+*Note:*  
+- `faiss_index/` (generated embeddings), `venv/` (virtual environment), and `.env` are intentionally not pushed to GitHub.
+
+---
+
+## 🛠️ **Local Setup (Clearly Step-by-Step):**
+
+**1. Clone the repository:**
 ```
 bash
-git clone <your-repo-link>
-cd ozark-ordinance-chatbot
+git clone <your-repo-url>
+cd CityOfficialsBot
 ```
-Create virtual environment (recommended):
+2. Set up the Python environment:
 ```
 python3 -m venv venv
 source venv/bin/activate  # macOS/Linux
 venv\Scripts\activate     # Windows
 ```
-Install dependencies:
+3. Install dependencies:
 ```
 pip install -r requirements.txt
 ```
-API Setup (Important!)
-
-Create a .env file in your root directory:
+4. Add your OpenAI API key:
+	•	Create a file named .env in the project root clearly containing:
 ```
 OPENAI_API_KEY=your_openai_api_key_here
 ```
@@ -41,133 +55,77 @@ OPENAI_API_KEY=your_openai_api_key_here
 
 ⸻
 
-📖 Preparing Embeddings (Important first-time setup)
+📚 Generate Ordinance Embeddings:
+	•	Place all PDFs you want to reference clearly into the ordinances/ folder.
 
-Place your PDF (ordinances.pdf) into the root directory.
-
-Run:
+Run embedding script explicitly:
 ```
 python prepare_pdf.py
 ```
-This generates embeddings in faiss_index/ (local use only, don’t push to GitHub).
+(This generates the faiss_index/ directory used for ordinance lookups.)
 
 ⸻
 
-💻 Run Chatbot Locally (CLI)
-```
-python chatbot.py
-```
-	•	Type your questions directly into the terminal.
-	•	Responses strictly quote from ordinance documents.
-
-⸻
-
-🌐 Run Web Interface (Streamlit)
+🚀 Run the Chatbot Locally (Streamlit):
 ```
 streamlit run app.py
 ```
-Open your browser:
-```
-http://localhost:8501
-```
+	•	Visit the application at: http://localhost:8501
 
 ⸻
 
-🚨 Important Legal Notice
-	•	The chatbot ONLY quotes directly from ordinances.
-	•	It does NOT provide interpretations or opinions.
-	•	Always consult city officials for clarification.
+🌐 Deploying to Streamlit Cloud (Recommended):
+	1.	Push your repo clearly to GitHub:
+```
+git add .
+git commit -m "Prepared chatbot for deployment"
+git push
+```
+	2.	Sign into Streamlit Cloud
+	3.	Deploy directly by selecting your GitHub repository and setting the main file as app.py.
 
 ⸻
 
-🌎 Deploying to Streamlit Cloud (For Easy Testing)
-	1.	Push this repo to GitHub.
-	2.	Create a free Streamlit Cloud account.
-	3.	Click “New App”, select your GitHub repository.
-	4.	Enter app.py as the entry point.
-	5.	Deploy to get a publicly shareable URL.
+⚠️ Important Usage Notes (Strict Legal Guidelines):
+	•	This chatbot provides only exact ordinance quotations.
+	•	It never offers interpretation or legal advice.
+	•	Always confirm with official city resources when making decisions.
 
 ⸻
 
-🚦 Embedding on a City's Website
+📌 Adding or Updating Ordinances:
 
-City IT administrators can embed the chatbot directly into the city’s official website using an iframe:
-```
-<iframe src="https://your-streamlit-app.streamlit.app" width="100%" height="800px"></iframe>
-```
-Or use DNS management to create a subdomain pointing directly to the Streamlit app URL.
+To add or update ordinances clearly:
+	1.	Put new or updated PDFs into the ordinances/ directory.
+	2.	Run the embeddings script again:
 
-⸻
-
-🔍 Updating Ordinances
-
-Whenever ordinances are updated:
-	1.	Replace ordinances.pdf with the updated PDF.
-	2.	Re-run the embedding script:
-```
 python prepare_pdf.py
-```
-	3.	Restart or redeploy your app.
+
+	3.	Restart your Streamlit application or redeploy.
 
 ⸻
 
-⚠️ Troubleshooting Common Errors
-	•	“Pickle deserialization error”:
-Update load method explicitly:
-```
-vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-```
-	•	Missing Streamlit command:
-Activate your virtual environment first:
-```
-source venv/bin/activate
-```
-
+📦 Dependencies and Versions:
+	•	Python: 3.11.7
+	•	Streamlit: 1.33.0
+	•	LangChain: 0.1.17
+	•	LangChain-OpenAI: 0.0.8
+	•	OpenAI: 1.6.1
+	•	FAISS-CPU: 1.8.0
+	•	Python-dotenv: 1.0.1
+	•	PyPDF: 4.0.2
+	•	Tiktoken: 0.5.2
 
 ⸻
 
-📌 Dependency List (requirements.txt)
-```
-streamlit
-langchain
-langchain-openai
-openai
-faiss-cpu
-python-dotenv
-pypdf
-```
-
+📬 Support and Contact Information:
+	•	Maintained by City of Ozark IT Department.
+	•	For technical assistance, contact: your-email@example.com
 
 ⸻
 
-🗂 Best Practices
-	•	Keep .env and sensitive files off GitHub.
-	•	Update dependencies regularly with pip freeze > requirements.txt.
+📝 License:
 
-⸻
-
-🤝 Contributing & Maintenance
-
-Contact City IT or egintegrations@gmail.com for support or contributions.
-
-⸻
-
-📜 License
-
-Egintegrations © 2024. All rights reserved.
+City of Ozark © 2025. All Rights Reserved.
 
 ---
-
-# 🚩 **Commands to create GitHub Repo & Push Code:**
-```
-bash
-git init
-git add .
-git commit -m "Initial chatbot commit"
-git branch -M main
-git remote add origin <your-github-repo-url>
-git push -u origin main
-```
-
-
-⸻
