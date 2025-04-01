@@ -13,21 +13,6 @@ This chatbot assists city officials in quickly and accurately referencing and co
 
 ---
 
-## 📂 **Repository Structure:**
-
-CityOfficialsBot/
-├── ordinances/              # PDFs from multiple cities
-├── app.py                   # Streamlit chatbot application
-├── prepare_pdf.py           # Script to generate embeddings with metadata
-├── requirements.txt         # Dependencies with explicit versions
-├── runtime.txt              # Python runtime specification (3.11.7)
-└── README.md
-
-*Note:*  
-- `faiss_index/` (generated embeddings), `venv/` (virtual environment), and `.env` are intentionally not pushed to GitHub.
-
----
-
 ## 🛠️ **Local Setup (Clearly Step-by-Step):**
 
 **1. Clone the repository:**
