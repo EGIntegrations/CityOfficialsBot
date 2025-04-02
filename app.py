@@ -37,24 +37,30 @@ def load_chain():
     else:
         vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
-    custom_template = """
-    You are a chatbot assisting city officials. 
-    STRICT RULES:
-    - Answer directly and exactly quoting from the requested city's ordinances.
-    - ONLY provide direct ordinance quotes without opinions.
-    - Clearly highlight the exact quoted ordinance answering the user's question.
-    - After the highlighted answer, provide relevant additional context separately.
-    - If no relevant ordinance found, respond exactly:
-      "I'm sorry, I could not find a relevant ordinance addressing your question."
+   custom_template = """
+You are a chatbot assisting city officials.
 
-    Ordinances Context:
-    {context}
+STRICT RULES:
+- Answer the user's question with the exact quoted ordinance text from the specified city.
+- Clearly and explicitly highlight ONLY the ordinance text that directly answers the question.
+- Provide additional surrounding context separately afterward, clearly marked.
+- Never provide interpretations or opinions.
+- If no relevant ordinance is found, respond exactly:
+"I'm sorry, I could not find a relevant ordinance addressing your question."
 
-    Question:
-    {question}
+Ordinances Context:
+{context}
 
-    Highlighted Answer (Direct quote), followed by Context:
-    """
+Question:
+{question}
+
+Answer format:
+HIGHLIGHTED ANSWER:
+"(Exact ordinance quotation answering the question)"
+
+ADDITIONAL CONTEXT:
+(Surrounding statements and additional relevant information)
+"""
 
     prompt = PromptTemplate(template=custom_template, input_variables=["context", "question"])
     llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
@@ -76,7 +82,6 @@ user_question = st.text_input("Ask a question about ordinances (mention city nam
 
 if st.button("Ask"):
     if user_question:
-        # Identify city from user's question clearly
         city_pattern = r"city of ([a-zA-Z\s]+)"
         city_match = re.search(city_pattern, user_question.lower())
         city_requested = city_match.group(1).strip() if city_match else None
@@ -84,12 +89,13 @@ if st.button("Ask"):
         response = chain({"question": user_question, "chat_history": st.session_state.history})
         ordinance_sources = response['source_documents']
 
-        # Prioritize clearly matching city documents
         matched_docs = [doc for doc in ordinance_sources if city_requested in doc.metadata.get('city', '').lower()] if city_requested else ordinance_sources
 
         if matched_docs:
+            # Highlight clearly the first document as the direct answer
             highlighted_answer = matched_docs[0].page_content.strip()
-            context_docs = matched_docs[1:]  # Additional docs as context
+            # The rest are context
+            context_docs = matched_docs[1:]
             context_text = "\n\n".join([doc.page_content.strip() for doc in context_docs])
 
             final_response = f"""
