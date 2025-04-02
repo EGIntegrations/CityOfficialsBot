@@ -37,7 +37,7 @@ def load_chain():
     else:
         vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
-   custom_template = """
+custom_template = """
 You are a chatbot assisting city officials.
 
 STRICT RULES:
