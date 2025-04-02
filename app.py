@@ -7,6 +7,7 @@ from langchain.prompts import PromptTemplate
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
+import re
 
 load_dotenv()
 
@@ -21,11 +22,12 @@ def load_chain():
             if pdf_file.endswith(".pdf"):
                 loader = PyPDFLoader(os.path.join(pdf_folder, pdf_file))
                 loaded_docs = loader.load()
+                city_name = pdf_file.replace(".pdf", "").lower()
                 for doc in loaded_docs:
-                    # Clearly add metadata for enhanced responses
                     doc.metadata['source_file'] = pdf_file
-                    doc.metadata['timestamp'] = "January 1, 2024"  # Update dynamically if possible
-                    doc.metadata['category'] = pdf_file.replace(".pdf", "")
+                    doc.metadata['timestamp'] = "January 1, 2024"
+                    doc.metadata['category'] = city_name.capitalize()
+                    doc.metadata['city'] = city_name
                 docs.extend(loaded_docs)
 
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
@@ -36,16 +38,12 @@ def load_chain():
         vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
     custom_template = """
-    You are a chatbot assisting city officials. Provide direct quotations from city ordinances along with their timestamp, category, and surrounding context.
-
+    You are a chatbot assisting city officials. 
     STRICT RULES:
-    - ONLY directly quote provided ordinance text.
-    - NEVER interpret, paraphrase, or give personal opinions.
-    - Include in your answer:
-      1. Exact ordinance quotation in quotation marks ("").
-      2. Timestamp (ordinance creation date).
-      3. Ordinance category.
-      4. Relevant surrounding context if available.
+    - Answer directly and exactly quoting from the requested city's ordinances.
+    - ONLY provide direct ordinance quotes without opinions.
+    - Clearly highlight the exact quoted ordinance answering the user's question.
+    - After the highlighted answer, provide relevant additional context separately.
     - If no relevant ordinance found, respond exactly:
       "I'm sorry, I could not find a relevant ordinance addressing your question."
 
@@ -55,7 +53,7 @@ def load_chain():
     Question:
     {question}
 
-    Answer:
+    Highlighted Answer (Direct quote), followed by Context:
     """
 
     prompt = PromptTemplate(template=custom_template, input_variables=["context", "question"])
@@ -63,7 +61,7 @@ def load_chain():
 
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
-        retriever=vectorstore.as_retriever(),
+        retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),  # multiple docs for better context
         combine_docs_chain_kwargs={"prompt": prompt},
         return_source_documents=True
     )
@@ -74,28 +72,43 @@ if 'history' not in st.session_state:
     st.session_state.history = []
 
 st.title("🏛️ City Officials Ordinance Reference Bot")
-user_question = st.text_input("Ask a question about ordinances from multiple cities:")
+user_question = st.text_input("Ask a question about ordinances (mention city name clearly):")
 
 if st.button("Ask"):
     if user_question:
+        # Identify city from user's question clearly
+        city_pattern = r"city of ([a-zA-Z\s]+)"
+        city_match = re.search(city_pattern, user_question.lower())
+        city_requested = city_match.group(1).strip() if city_match else None
+
         response = chain({"question": user_question, "chat_history": st.session_state.history})
-
         ordinance_sources = response['source_documents']
-        final_response = ""
-        for doc in ordinance_sources:
-            text = doc.page_content.strip()
-            timestamp = doc.metadata.get('timestamp', 'N/A')
-            category = doc.metadata.get('category', 'N/A')
-            source_file = doc.metadata.get('source_file', 'N/A')
 
-            final_response += f"""
-            Ordinance: "{text}"
+        # Prioritize clearly matching city documents
+        matched_docs = [doc for doc in ordinance_sources if city_requested in doc.metadata.get('city', '').lower()] if city_requested else ordinance_sources
 
-            - **Timestamp:** {timestamp}
-            - **Category:** {category}
-            - **Source File:** {source_file}
-            ---
-            """
+        if matched_docs:
+            highlighted_answer = matched_docs[0].page_content.strip()
+            context_docs = matched_docs[1:]  # Additional docs as context
+            context_text = "\n\n".join([doc.page_content.strip() for doc in context_docs])
 
-        st.write("🤖", final_response)
+            final_response = f"""
+### 🎯 Highlighted Answer:
+> "{highlighted_answer}"
+
+---
+
+### 📚 Additional Context:
+{context_text if context_text else "No additional context available."}
+
+---
+
+- **Timestamp:** {matched_docs[0].metadata.get('timestamp', 'N/A')}
+- **City:** {matched_docs[0].metadata.get('category', 'N/A')}
+- **Source File:** {matched_docs[0].metadata.get('source_file', 'N/A')}
+"""
+        else:
+            final_response = "I'm sorry, I could not find a relevant ordinance addressing your question."
+
+        st.markdown(final_response, unsafe_allow_html=True)
         st.session_state.history.append((user_question, final_response))
