@@ -15,6 +15,7 @@ from langchain.text_splitter    import RecursiveCharacterTextSplitter
 from langchain.prompts          import PromptTemplate
 from langchain.chains           import ConversationalRetrievalChain
 from langchain.chains.combine_documents import StuffDocumentsChain
+from langchain.chains import LLMChain
 
 import geoip2.database
 
@@ -120,7 +121,10 @@ FORMAT
         prompt                 = prompt,
         document_variable_name = "context",
         verbose                = False,
+        llm_chain              = llm_chain,
     )
+    
+llm_chain = LLMChain(llm=llm, prompt=prompt)
 
     # Final Conversational Retrieval chain
     return ConversationalRetrievalChain(
