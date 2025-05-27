@@ -9,7 +9,7 @@ faiss-cpu
 python-dotenv
 pypdf
 tiktoken
-langchain-community
+langchain-community==0.0.17
 supabase==1.*
 geoip2
 stripe
