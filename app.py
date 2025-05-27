@@ -104,8 +104,10 @@ FORMAT
     return ConversationalRetrievalChain.from_llm(
         llm           = llm,
         retriever     = vectorstore.as_retriever(search_kwargs={"k":6}),
-        combine_docs_chain_kwargs = {"prompt": prompt},
-        "document_variable_name": "context", 
+        combine_docs_chain_kwargs = {
+        "prompt": prompt,
+        "document_variable_name": "context",
+        },
         return_source_documents   = True,
     )
 
