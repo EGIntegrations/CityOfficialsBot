@@ -99,12 +99,13 @@ FORMAT
 
     prompt = PromptTemplate(template=custom_template,
                             input_variables=["context","question"])
-    llm    = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
+    llm    = ChatOpenAI(model_name="gpt-4.1-mini-2025-04-14", temperature=0)
 
     return ConversationalRetrievalChain.from_llm(
         llm           = llm,
         retriever     = vectorstore.as_retriever(search_kwargs={"k":6}),
         combine_docs_chain_kwargs = {"prompt": prompt},
+        "document_variable_name": "context", 
         return_source_documents   = True,
     )
 
