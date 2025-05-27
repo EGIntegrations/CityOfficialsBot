@@ -10,7 +10,6 @@ python-dotenv
 pypdf
 tiktoken
 langchain-community
-streamlit‑extras
 supabase==1.*
 geoip2
 stripe
