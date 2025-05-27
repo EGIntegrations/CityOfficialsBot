@@ -124,7 +124,7 @@ FORMAT
         llm_chain              = llm_chain,
     )
     
-llm_chain = LLMChain(llm=llm, prompt=prompt)
+    llm_chain = LLMChain(llm=llm, prompt=prompt)
 
     # Final Conversational Retrieval chain
     return ConversationalRetrievalChain(
