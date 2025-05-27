@@ -1,123 +1,177 @@
 import streamlit as st
+from streamlit_extras.stoggle import stoggle   # ⬅️ expander‑button widget
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
-from langchain_community.document_loaders import PyPDFLoader
+from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-import os
-import re
+import os, re, pickle, json, time, geoip2.database
 
+################################################################################
+# 0. ENV / CONFIG
+################################################################################
 load_dotenv()
+DATA_DIR       = "ordinances"
+INDEX_DIR      = "faiss_index"
+HISTORY_FILE   = ".conv_history.pkl"          # persisted chat history
+MAX_TURNS_SAVED = 50                          # truncate history on disk
 
-@st.cache_resource
+################################################################################
+# 1. UTILITY HELPERS
+################################################################################
+def get_user_city_guess() -> str | None:
+    """Geo‑locate the user’s IP to guess a city.  (Falls back to None)."""
+    try:
+        reader = geoip2.database.Reader("GeoLite2‑City.mmdb")
+        ip     = st.experimental_get_query_params().get("ip",[None])[0] \
+                 or st.request.remote_addr
+        resp   = reader.city(ip)
+        return resp.city.name.lower() if resp.city.name else None
+    except Exception:
+        return None
+
+
+def save_history(chat_hist:list[tuple[str,str]]) -> None:
+    with open(HISTORY_FILE,"wb") as f:
+        pickle.dump(chat_hist[-MAX_TURNS_SAVED:], f)
+
+
+def load_history() -> list[tuple[str,str]]:
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE,"rb") as f:
+            return pickle.load(f)
+    return []
+
+
+################################################################################
+# 2. VECTOR INDEX (persists locally)
+################################################################################
+@st.cache_resource(show_spinner="⏳ Building / loading vector store …")
 def load_chain():
     embeddings = OpenAIEmbeddings()
 
-    if not os.path.exists("faiss_index"):
-        docs = []
-        pdf_folder = "ordinances/"
-        for pdf_file in os.listdir(pdf_folder):
-            if pdf_file.endswith(".pdf") and not pdf_file.startswith("._"):
-                print(f"🔍 Attempting to load {pdf_file}")
-                try:
-                    loader = PyPDFLoader(os.path.join(pdf_folder, pdf_file))
-                    loaded_docs = loader.load()
-                    city_name = pdf_file.replace(".pdf", "").lower()
-                    for doc in loaded_docs:
-                        doc.metadata['source_file'] = pdf_file
-                        doc.metadata['timestamp'] = "January 1, 2024"
-                        doc.metadata['category'] = city_name.capitalize()
-                        doc.metadata['city'] = city_name
-                    docs.extend(loaded_docs)
-                except Exception as e:
-                    print(f"⚠️ Skipping {pdf_file}: {e}")
-                    continue
+    if not os.path.exists(INDEX_DIR):
+        docs       = []
+        for pdf in os.listdir(DATA_DIR):
+            if not pdf.endswith(".pdf"): continue
+            city_name   = pdf.removesuffix(".pdf").lower()
 
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-        docs = text_splitter.split_documents(docs)
+            loader      = PyPDFLoader(os.path.join(DATA_DIR,pdf))
+            loaded_docs = loader.load()
+
+            for d in loaded_docs:
+                d.metadata.update(
+                    source_file = pdf,
+                    timestamp   = "2024‑01‑01",
+                    city        = city_name,
+                )
+            docs.extend(loaded_docs)
+
+        splitter    = RecursiveCharacterTextSplitter(chunk_size=1000,chunk_overlap=150)
+        docs        = splitter.split_documents(docs)
         vectorstore = FAISS.from_documents(docs, embeddings)
-        vectorstore.save_local("faiss_index")
+        vectorstore.save_local(INDEX_DIR)
     else:
-        vectorstore = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+        vectorstore = FAISS.load_local(INDEX_DIR, embeddings,
+                                       allow_dangerous_deserialization=True)
 
+    #######################################################
+    # PROMPT — concise answer first line only
+    #######################################################
     custom_template = """
-    You are a chatbot assisting city officials.
+You are a compliance assistant for city officials.
 
-    STRICT RULES:
-    - Answer the user's question with the exact quoted ordinance text from the specified city.
-    - Clearly and explicitly highlight ONLY the ordinance text that directly answers the question.
-    - Provide additional surrounding context separately afterward, clearly marked.
-    - Never provide interpretations or opinions.
-    - If no relevant ordinance is found, respond exactly:
-    "I'm sorry, I could not find a relevant ordinance addressing your question."
+RULES
+• Return **one very concise sentence** that directly answers the question with an exact
+  quotation from the ordinance (no interpretation).  
+• Quote must come from the requested city’s code (metadata.city).  
+• Nothing relevant → respond exactly:
+  I'm sorry, I could not find a relevant ordinance addressing your question.
 
-    Ordinances Context:
-    {context}
+FORMAT
+<<ANSWER>>
+(Exact quoted text)
 
-    Question:
-    {question}
+<<CONTEXT>>
+(other surrounding clauses)"""
 
-    Answer format:
-    HIGHLIGHTED ANSWER:
-    "(Exact ordinance quotation answering the question)"
-
-    ADDITIONAL CONTEXT:
-    (Surrounding statements and additional relevant information)
-    """
-
-    prompt = PromptTemplate(template=custom_template, input_variables=["context", "question"])
-    llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
+    prompt = PromptTemplate(template=custom_template,
+                            input_variables=["context","question"])
+    llm    = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
 
     return ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
-        combine_docs_chain_kwargs={"prompt": prompt},
-        return_source_documents=True
+        llm           = llm,
+        retriever     = vectorstore.as_retriever(search_kwargs={"k":6}),
+        combine_docs_chain_kwargs = {"prompt": prompt},
+        return_source_documents   = True,
     )
 
 chain = load_chain()
 
+################################################################################
+# 3. STREAMLIT UI
+################################################################################
+st.title("🏛️ City Ordinance Reference Bot")
+
+# ---------- sidebar ----------------------------------------------------------
+with st.sidebar:
+    st.header("⚙️ Settings & Admin")
+    # 📂 Upload / remove ordinance PDFs (per‑user SaaS portal)
+    st.subheader("Manage Ordinances")
+    uploaded = st.file_uploader("Add PDF", type="pdf")
+    if uploaded is not None:
+        dest = Path(DATA_DIR)/uploaded.name
+        dest.write_bytes(uploaded.read())
+        st.success(f"Uploaded {uploaded.name}.  Please restart to re‑index.")
+
+    remove_file = st.text_input("Filename to remove")
+    if st.button("Delete") and remove_file:
+        try:
+            os.remove(Path(DATA_DIR)/remove_file)
+            st.success("Deleted; restart to re‑index.")
+        except FileNotFoundError:
+            st.error("File not found.")
+
+    st.markdown("---")
+    st.subheader("💳 Billing / Licences")
+    st.write("Handled in admin dashboard (Stripe + Supabase).")
+
+# ---------- main panel -------------------------------------------------------
 if 'history' not in st.session_state:
-    st.session_state.history = []
+    st.session_state.history = load_history()   # persisted history
 
-st.title("🏛️ City Officials Ordinance Reference Bot")
-user_question = st.text_input("Ask a question about ordinances (mention city name clearly):")
+# city selector (pre‑filled with guess)
+cities = sorted({p.removesuffix(".pdf") for p in os.listdir(DATA_DIR) if p.endswith(".pdf")})
+guessed = get_user_city_guess()
+city_requested = st.selectbox("Select city", cities,
+                              index = cities.index(guessed) if guessed in cities else 0)
 
-if st.button("Ask"):
-    if user_question:
-        city_pattern = r"city of ([a-zA-Z\s]+)"
-        city_match = re.search(city_pattern, user_question.lower())
-        city_requested = city_match.group(1).strip() if city_match else None
+question = st.text_input("Ask your ordinance question")
+ask = st.button("🔍 Answer")
 
-        response = chain({"question": user_question, "chat_history": st.session_state.history})
-        ordinance_sources = response['source_documents']
+if ask and question:
+    # include city name inside the question for filtering
+    combined_q = f"[city:{city_requested}] {question}"
 
-        matched_docs = [doc for doc in ordinance_sources if city_requested in doc.metadata.get('city', '').lower()] if city_requested else ordinance_sources
+    resp   = chain({"question": combined_q, "chat_history": st.session_state.history})
+    docs   = [d for d in resp['source_documents']
+              if d.metadata.get('city') == city_requested.lower()]
 
-        if matched_docs:
-            highlighted_answer = matched_docs[0].page_content.strip()
-            context_docs = matched_docs[1:]
-            context_text = "\n\n".join([doc.page_content.strip() for doc in context_docs])
+    if not docs:
+        answer = "I'm sorry, I could not find a relevant ordinance addressing your question."
+        st.error(answer)
+    else:
+        quoted = docs[0].page_content.strip()
+        surround = "\n\n".join(d.page_content.strip() for d in docs[1:])
 
-            final_response = f"""
-### 🎯 Highlighted Answer:
-> "{highlighted_answer}"
+        st.markdown(f"### 🎯 Answer\n> {quoted}")
 
----
+        stoggle("Show additional context",
+                surround or "_No further context available._",)
 
-### 📚 Additional Context:
-{context_text if context_text else "No additional context available."}
+        # persistent history
+        st.session_state.history.append((question, quoted))
+        save_history(st.session_state.history)
 
----
-
-- **Timestamp:** {matched_docs[0].metadata.get('timestamp', 'N/A')}
-- **City:** {matched_docs[0].metadata.get('category', 'N/A')}
-- **Source File:** {matched_docs[0].metadata.get('source_file', 'N/A')}
-"""
-        else:
-            final_response = "I'm sorry, I could not find a relevant ordinance addressing your question."
-
-        st.markdown(final_response, unsafe_allow_html=True)
-        st.session_state.history.append((user_question, final_response))
