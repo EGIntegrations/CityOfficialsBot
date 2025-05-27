@@ -14,8 +14,8 @@ from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter    import RecursiveCharacterTextSplitter
 from langchain.prompts          import PromptTemplate
 from langchain.chains           import ConversationalRetrievalChain
-from langchain.chains.combine_documents import StuffDocumentsChain
-from langchain.chains import LLMChain
+from langchain.chains.combine_documents.stuff import StuffDocumentsChain
+from langchain.chains.llm import LLMChain
 
 import geoip2.database
 
