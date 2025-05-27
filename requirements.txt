@@ -2,7 +2,7 @@ streamlit
 requests
 beautifulsoup4
 pandas
-langchain
+langchain==0.1.7
 langchain-openai
 openai
 faiss-cpu
