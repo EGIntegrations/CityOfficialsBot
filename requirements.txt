@@ -2,15 +2,15 @@ streamlit
 requests
 beautifulsoup4
 pandas
-langchain
-langchain-openai
-openai
-faiss-cpu
 python-dotenv
 pypdf
 tiktoken
-langchain-community
-supabase
+ faiss‑cpu==1.7.4
+langchain==0.1.6
+langchain-openai==0.1.1
+langchain‑community==0.0.15
+openai
+supabase==1.*
 geoip2
 stripe
-streamlit-extras
+streamlit_extras
