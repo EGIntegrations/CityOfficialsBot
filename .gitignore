@@ -6,3 +6,11 @@ __pycache__/
 # macOS junk
 .DS_Store
 ._*
+.env
+*.pyc
+__pycache__/
+.streamlit/secrets.toml
+ordinances/
+faiss_index/
+.conv_history.pkl
+GeoLite2-City.mmdb
