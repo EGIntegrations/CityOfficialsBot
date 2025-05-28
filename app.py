@@ -8,13 +8,13 @@ from dotenv import load_dotenv
 
 from langchain_openai               import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import FAISS
-from langchain.prompts              import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain.document_loaders     import PyPDFLoader
 from langchain.text_splitter        import RecursiveCharacterTextSplitter
 
 # **new‑style chain objects**
 from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains                  import ConversationalRetrievalChain
+from langchain.chains import ConversationalRetrievalChain
 
 # ──────────────────────────────────────────────────────
 # 0. ENV / CONFIG
@@ -105,17 +105,20 @@ FORMAT
     llm = ChatOpenAI(model_name="gpt-4.1-mini-2025-04-14", temperature=0)
 
     # new helper returns a StuffDocumentsChain object
-    stuff_chain = create_stuff_documents_chain(
+    
+    combine_docs_chain = create_stuff_documents_chain(
         llm,
-        prompt=prompt,
+        prompt=QA_PROMPT,
         document_variable_name="context",
     )
 
-    qa_chain = ConversationalRetrievalChain(
-        retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
-        combine_docs_chain=stuff_chain,
-        return_source_documents=True,
-    )
+    
+     qa_chain = ConversationalRetrievalChain(
+         retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
+         combine_docs_chain=combine_docs_chain,
+         # defaults for question‑generator are fine
+         return_source_documents=True,
+     )
     return qa_chain
 
 
