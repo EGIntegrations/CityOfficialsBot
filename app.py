@@ -74,44 +74,44 @@ def load_chain():
     try:
         embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
 
-    # ---------- build / load FAISS index ----------------
-    if not os.path.exists(INDEX_DIR):
-        # Create directories if they don't exist
-        os.makedirs(DATA_DIR, exist_ok=True)
-        os.makedirs(INDEX_DIR, exist_ok=True)
-        
-        docs = []
-        for pdf in os.listdir(DATA_DIR):
-            if not pdf.endswith(".pdf"):
-                continue
-            city_name = pdf.removesuffix(".pdf").lower()
+        # ---------- build / load FAISS index ----------------
+        if not os.path.exists(INDEX_DIR):
+            # Create directories if they don't exist
+            os.makedirs(DATA_DIR, exist_ok=True)
+            os.makedirs(INDEX_DIR, exist_ok=True)
+            
+            docs = []
+            for pdf in os.listdir(DATA_DIR):
+                if not pdf.endswith(".pdf"):
+                    continue
+                city_name = pdf.removesuffix(".pdf").lower()
 
-            loader = PyPDFLoader(str(Path(DATA_DIR) / pdf))
-            for d in loader.load():
-                d.metadata.update(
-                    source_file=pdf,
-                    timestamp="2024-01-01",
-                    city=city_name,
-                )
-                docs.append(d)
+                loader = PyPDFLoader(str(Path(DATA_DIR) / pdf))
+                for d in loader.load():
+                    d.metadata.update(
+                        source_file=pdf,
+                        timestamp="2024-01-01",
+                        city=city_name,
+                    )
+                    docs.append(d)
 
-        if docs:
-            chunks = RecursiveCharacterTextSplitter(
-                chunk_size=1_000, chunk_overlap=150
-            ).split_documents(docs)
-            vectorstore = FAISS.from_documents(chunks, embeddings)
-            vectorstore.save_local(INDEX_DIR)
+            if docs:
+                chunks = RecursiveCharacterTextSplitter(
+                    chunk_size=1_000, chunk_overlap=150
+                ).split_documents(docs)
+                vectorstore = FAISS.from_documents(chunks, embeddings)
+                vectorstore.save_local(INDEX_DIR)
+            else:
+                # Create empty vectorstore if no documents
+                st.warning("No PDF files found in ordinances directory. Please upload some PDFs.")
+                vectorstore = FAISS.from_texts(["placeholder"], embeddings)
         else:
-            # Create empty vectorstore if no documents
-            st.warning("No PDF files found in ordinances directory. Please upload some PDFs.")
-            vectorstore = FAISS.from_texts(["placeholder"], embeddings)
-    else:
-        # Load existing index
-        vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
+            # Load existing index
+            vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
 
-    # ---------- prompt & chain wiring -------------------
-    QA_PROMPT = PromptTemplate(
-        template="""You are a compliance assistant for city officials.
+        # ---------- prompt & chain wiring -------------------
+        QA_PROMPT = PromptTemplate(
+            template="""You are a compliance assistant for city officials.
 
 RULES:
 • Return **one very concise sentence** that directly answers the question with
@@ -126,25 +126,25 @@ Context from ordinances:
 Question: {input}
 
 Answer:""",
-        input_variables=["context", "input"]
-    )
+            input_variables=["context", "input"]
+        )
 
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0, openai_api_key=os.getenv("OPENAI_API_KEY"))
+        llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0, openai_api_key=os.getenv("OPENAI_API_KEY"))
 
-    # Create the document chain
-    combine_docs_chain = create_stuff_documents_chain(
-        llm=llm,
-        prompt=QA_PROMPT
-    )
+        # Create the document chain
+        combine_docs_chain = create_stuff_documents_chain(
+            llm=llm,
+            prompt=QA_PROMPT
+        )
 
-    # Create the retrieval chain
-    qa_chain = create_retrieval_chain(
-        retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
-        combine_docs_chain=combine_docs_chain
-    )
-    
-    return qa_chain, vectorstore
-    
+        # Create the retrieval chain
+        qa_chain = create_retrieval_chain(
+            retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
+            combine_docs_chain=combine_docs_chain
+        )
+        
+        return qa_chain, vectorstore
+        
     except Exception as e:
         st.error(f"Error initializing chain: {str(e)}")
         return None, None
