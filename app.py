@@ -80,7 +80,7 @@ def load_chain():
         vectorstore.save_local(INDEX_DIR)           # <-- no index_name arg
     else:
         # updated call – removed deprecated kwarg
-        vectorstore = FAISS.load_local(INDEX_DIR, embeddings)
+        vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
 
     # ----------------------- PROMPT ------------------------------------------
     tmpl = """
