@@ -1,46 +1,47 @@
-import os, re, pickle, json, time, geoip2.database
+# app.py  –  City‑ordinance RAG demo (May‑2025 versions)
+# ──────────────────────────────────────────────────────
+import os, pickle, geoip2.database
 from pathlib import Path
-
 import streamlit as st
-from streamlit_extras.stoggle import stoggle          # ⬅️ expander‑button
+from streamlit_extras.stoggle import stoggle
 from dotenv import load_dotenv
 
-from langchain_openai              import OpenAIEmbeddings, ChatOpenAI
+from langchain_openai               import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import FAISS
-from langchain.chains                   import ConversationalRetrievalChain
-from langchain.chains.combine_documents.stuff import StuffDocumentsChain
-from langchain.chains.llm               import LLMChain
-from langchain.prompts                  import PromptTemplate
-from langchain.document_loaders         import PyPDFLoader
-from langchain.text_splitter            import RecursiveCharacterTextSplitter
+from langchain.prompts              import PromptTemplate
+from langchain.document_loaders     import PyPDFLoader
+from langchain.text_splitter        import RecursiveCharacterTextSplitter
 
-################################################################################
+# **new‑style chain objects**
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains                  import ConversationalRetrievalChain
+
+# ──────────────────────────────────────────────────────
 # 0. ENV / CONFIG
-################################################################################
+# ──────────────────────────────────────────────────────
 load_dotenv()
 DATA_DIR        = "ordinances"
 INDEX_DIR       = "faiss_index"
-HISTORY_FILE    = ".conv_history.pkl"       # persisted chat history
-MAX_TURNS_SAVED = 50                        # truncate history on disk
+HISTORY_FILE    = ".conv_history.pkl"
+MAX_TURNS_SAVED = 50
 
-################################################################################
-# 1. UTILITY HELPERS
-################################################################################
+# ──────────────────────────────────────────────────────
+# 1. HELPERS
+# ──────────────────────────────────────────────────────
 def get_user_city_guess() -> str | None:
-    """Geo‑locate the user’s IP to guess a city.  (Falls back to None)."""
+    """Best‑effort geo‑IP → city name (very coarse)."""
     try:
         reader = geoip2.database.Reader("GeoLite2‑City.mmdb")
-        ip     = st.experimental_get_query_params().get("ip", [None])[0] \
-                 or st.request.remote_addr
-        resp   = reader.city(ip)
-        return resp.city.name.lower() if resp.city.name else None
+        ip     = (st.experimental_get_query_params().get("ip", [None])[0]
+                  or st.request.remote_addr)
+        return (city := reader.city(ip).city.name) and city.lower()
     except Exception:
         return None
 
 
-def save_history(chat_hist: list[tuple[str, str]]) -> None:
+def save_history(hist: list[tuple[str, str]]) -> None:
     with open(HISTORY_FILE, "wb") as f:
-        pickle.dump(chat_hist[-MAX_TURNS_SAVED:], f)
+        pickle.dump(hist[-MAX_TURNS_SAVED:], f)
 
 
 def load_history() -> list[tuple[str, str]]:
@@ -49,13 +50,14 @@ def load_history() -> list[tuple[str, str]]:
             return pickle.load(f)
     return []
 
-################################################################################
-# 2. VECTOR INDEX  (persists locally)
-################################################################################
+# ──────────────────────────────────────────────────────
+# 2. VECTOR INDEX & QA CHAIN   (cached)
+# ──────────────────────────────────────────────────────
 @st.cache_resource(show_spinner="⏳ Building / loading vector store …")
 def load_chain():
     embeddings = OpenAIEmbeddings()
 
+    # ---------- build / load FAISS index ----------------
     if not os.path.exists(INDEX_DIR):
         docs = []
         for pdf in os.listdir(DATA_DIR):
@@ -63,26 +65,24 @@ def load_chain():
                 continue
             city_name = pdf.removesuffix(".pdf").lower()
 
-            loader       = PyPDFLoader(os.path.join(DATA_DIR, pdf))
-            loaded_docs  = loader.load()
-            for d in loaded_docs:
+            for d in PyPDFLoader(Path(DATA_DIR, pdf)).load():
                 d.metadata.update(
                     source_file=pdf,
                     timestamp="2024‑01‑01",
                     city=city_name,
                 )
-            docs.extend(loaded_docs)
+                docs.append(d)
 
-        splitter     = RecursiveCharacterTextSplitter(chunk_size=1000,
-                                                     chunk_overlap=150)
-        split_docs   = splitter.split_documents(docs)
-        vectorstore  = FAISS.from_documents(split_docs, embeddings)
-        vectorstore.save_local(INDEX_DIR)           # <-- no index_name arg
+        chunks      = RecursiveCharacterTextSplitter(
+                         chunk_size=1_000, chunk_overlap=150
+                      ).split_documents(docs)
+        vectorstore = FAISS.from_documents(chunks, embeddings)
+        vectorstore.save_local(INDEX_DIR)
     else:
-        # updated call – removed deprecated kwarg
-        vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
+        # 0.2.x signature – no kwarg
+        vectorstore = FAISS.load_local(INDEX_DIR, embeddings)
 
-    # ----------------------- PROMPT ------------------------------------------
+    # ---------- prompt & chain wiring -------------------
     tmpl = """
 You are a compliance assistant for city officials.
 
@@ -101,83 +101,81 @@ FORMAT
 (other surrounding clauses)"""
     prompt = PromptTemplate(template=tmpl,
                             input_variables=["context", "question"])
-    llm    = ChatOpenAI(model_name="gpt-4.1-mini-2025-04-14", temperature=0)
 
-    return ConversationalRetrievalChain.from_llm(
-        llm=llm,
+    llm = ChatOpenAI(model_name="gpt-4.1-mini-2025-04-14", temperature=0)
+
+    # new helper returns a StuffDocumentsChain object
+    stuff_chain = create_stuff_documents_chain(
+        llm,
+        prompt=prompt,
+        document_variable_name="context",
+    )
+
+    qa_chain = ConversationalRetrievalChain(
         retriever=vectorstore.as_retriever(search_kwargs={"k": 4}),
-        combine_docs_chain_kwargs={
-            "prompt": prompt,
-            "document_variable_name": "context",
-        },
+        combine_docs_chain=stuff_chain,
         return_source_documents=True,
     )
+    return qa_chain
+
 
 chain = load_chain()
 
-################################################################################
+# ──────────────────────────────────────────────────────
 # 3. STREAMLIT UI
-################################################################################
+# ──────────────────────────────────────────────────────
 st.title("🏛️ City Ordinance Reference Bot")
 
-# ---------- sidebar ----------------------------------------------------------
+# ---------- sidebar -----------------------------------
 with st.sidebar:
     st.header("⚙️ Settings & Admin")
 
-    # 📂 Upload / remove ordinance PDFs
     st.subheader("Manage Ordinances")
     uploaded = st.file_uploader("Add PDF", type="pdf")
-    if uploaded is not None:
+    if uploaded:
         dest = Path(DATA_DIR) / uploaded.name
         dest.write_bytes(uploaded.read())
-        st.success(f"Uploaded {uploaded.name}.  Please restart to re‑index.")
+        st.success("Uploaded.  Restart app to re‑index.")
 
-    remove_file = st.text_input("Filename to remove")
-    if st.button("Delete") and remove_file:
+    del_file = st.text_input("Filename to remove")
+    if st.button("Delete") and del_file:
         try:
-            os.remove(Path(DATA_DIR) / remove_file)
-            st.success("Deleted; restart to re‑index.")
+            (Path(DATA_DIR) / del_file).unlink()
+            st.success("Deleted.  Restart app to re‑index.")
         except FileNotFoundError:
             st.error("File not found.")
 
     st.markdown("---")
     st.subheader("💳 Billing / Licences")
-    st.write("Handled in admin dashboard (Stripe + Supabase).")
+    st.write("Handled in admin dashboard (Stripe + Supabase).")
 
-# ---------- main panel -------------------------------------------------------
+# ---------- main panel --------------------------------
 if "history" not in st.session_state:
     st.session_state.history = load_history()
 
-# city selector (pre‑filled with guess)
-cities   = sorted({p.removesuffix(".pdf")
-                   for p in os.listdir(DATA_DIR) if p.endswith(".pdf")})
-guessed  = get_user_city_guess()
-city_requested = st.selectbox("Select city", cities,
-                              index=cities.index(guessed)
-                              if guessed in cities else 0)
+cities   = sorted(p.removesuffix(".pdf").lower()
+                  for p in os.listdir(DATA_DIR) if p.endswith(".pdf"))
+guess    = get_user_city_guess()
+city_sel = st.selectbox("Select city", cities,
+                        index=cities.index(guess) if guess in cities else 0)
 
 question = st.text_input("Ask your ordinance question")
-ask      = st.button("🔍 Answer")
-
-if ask and question:
-    combined_q = f"[city:{city_requested}] {question}"
-
-    resp = chain({"question": combined_q,
+if st.button("🔍 Answer") and question:
+    q = f"[city:{city_sel}] {question}"
+    resp = chain({"question": q,
                   "chat_history": st.session_state.history})
 
     docs = [d for d in resp["source_documents"]
-            if d.metadata.get("city") == city_requested.lower()]
+            if d.metadata.get("city") == city_sel]
 
     if not docs:
-        st.error("I'm sorry, I could not find a relevant ordinance addressing "
-                 "your question.")
+        st.error("I'm sorry, I could not find a relevant ordinance addressing your question.")
     else:
-        quoted   = docs[0].page_content.strip()
-        surround = "\n\n".join(d.page_content.strip() for d in docs[1:])
+        answer   = docs[0].page_content.strip()
+        context  = "\n\n".join(d.page_content.strip() for d in docs[1:])
 
-        st.markdown(f"### 🎯 Answer\n> {quoted}")
-        stoggle("Show additional context",
-                surround or "_No further context available._")
+        st.markdown(f"### 🎯 Answer\n> {answer}")
+        stoggle("Show additional context", context or "_No further context available._")
 
-        st.session_state.history.append((question, quoted))
+        st.session_state.history.append((question, answer))
         save_history(st.session_state.history)
