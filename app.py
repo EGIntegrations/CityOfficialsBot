@@ -1,8 +1,12 @@
 # app.py  –  City‑ordinance RAG demo (May‑2025 versions)
 # ──────────────────────────────────────────────────────
-import os, pickle, geoip2.database
+import os, pickle
 from pathlib import Path
 import streamlit as st
+
+# MUST BE FIRST STREAMLIT COMMAND
+st.set_page_config(page_title="City Ordinance Bot", page_icon="🏛️")
+
 from streamlit_extras.stoggle import stoggle
 from dotenv import load_dotenv
 
@@ -20,16 +24,19 @@ from langchain.chains import create_retrieval_chain
 # 0. ENV / CONFIG
 # ──────────────────────────────────────────────────────
 load_dotenv()
+
+# Set OpenAI API key as environment variable for langchain
+os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+
 DATA_DIR        = "ordinances"
 INDEX_DIR       = "faiss_index"
 HISTORY_FILE    = ".conv_history.pkl"
 MAX_TURNS_SAVED = 50
 
 # Check for OpenAI API key
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    st.error("⚠️ OpenAI API key not found! Please set it in your .env file or Streamlit secrets.")
-    st.info("Add your OpenAI API key to continue using this app.")
+if not os.environ.get("OPENAI_API_KEY"):
+    st.error("⚠️ OpenAI API key not found! Please set it in Streamlit secrets.")
+    st.info("Go to your app settings and add OPENAI_API_KEY to secrets.")
     st.stop()
 
 # ──────────────────────────────────────────────────────
@@ -38,6 +45,7 @@ if not OPENAI_API_KEY:
 def get_user_city_guess() -> str | None:
     """Best‑effort geo‑IP → city name (very coarse)."""
     try:
+        import geoip2.database
         reader = geoip2.database.Reader("GeoLite2-City.mmdb")
         # Get IP from query params or session state
         ip = st.query_params.get("ip", None)
@@ -66,13 +74,9 @@ def load_history() -> list[tuple[str, str]]:
 # ──────────────────────────────────────────────────────
 @st.cache_resource(show_spinner="⏳ Building / loading vector store …")
 def load_chain():
-    # Verify API key is available
-    if not os.getenv("OPENAI_API_KEY"):
-        st.error("OpenAI API key is not configured!")
-        return None, None
-        
     try:
-        embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+        # Initialize embeddings without explicit API key (uses env var)
+        embeddings = OpenAIEmbeddings()
 
         # ---------- build / load FAISS index ----------------
         if not os.path.exists(INDEX_DIR):
@@ -129,7 +133,8 @@ Answer:""",
             input_variables=["context", "input"]
         )
 
-        llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0, openai_api_key=os.getenv("OPENAI_API_KEY"))
+        # Initialize LLM without explicit API key (uses env var)
+        llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
 
         # Create the document chain
         combine_docs_chain = create_stuff_documents_chain(
@@ -147,6 +152,8 @@ Answer:""",
         
     except Exception as e:
         st.error(f"Error initializing chain: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
         return None, None
 
 
@@ -156,7 +163,6 @@ chain, vectorstore = load_chain()
 # ──────────────────────────────────────────────────────
 # 3. STREAMLIT UI
 # ──────────────────────────────────────────────────────
-st.set_page_config(page_title="City Ordinance Bot", page_icon="🏛️")
 st.title("🏛️ City Ordinance Reference Bot")
 
 # Check if chain initialized properly
@@ -264,7 +270,7 @@ if st.button("🔍 Search Ordinances", type="primary") and question:
                 
         except Exception as e:
             st.error(f"Error processing question: {str(e)}")
-            st.info("Make sure your OpenAI API key is set in the .env file")
+            st.info("Make sure your OpenAI API key is set in Streamlit secrets")
 
 # Show recent history
 if st.session_state.history:
