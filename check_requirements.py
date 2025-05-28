@@ -35,7 +35,7 @@ def check_requirements():
 
 streamlit==1.45.0
 streamlit-extras==0.7.1
-openai>=1.32,<1.40         
+openai==1.39.0
 tiktoken==0.7.0
 langchain==0.2.11
 langchain-community==0.2.10
@@ -43,7 +43,7 @@ langchain-openai==0.1.20
 faiss-cpu==1.8.0
 pypdf==4.2.0
 geoip2==4.8.0
-rich==13.7.1
+rich==14.0.0
             
             with open('requirements_clean.txt', 'w', encoding='utf-8') as f:
                 f.write(clean_content)
