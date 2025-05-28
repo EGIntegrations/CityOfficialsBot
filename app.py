@@ -25,6 +25,13 @@ INDEX_DIR       = "faiss_index"
 HISTORY_FILE    = ".conv_history.pkl"
 MAX_TURNS_SAVED = 50
 
+# Check for OpenAI API key
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    st.error("⚠️ OpenAI API key not found! Please set it in your .env file or Streamlit secrets.")
+    st.info("Add your OpenAI API key to continue using this app.")
+    st.stop()
+
 # ──────────────────────────────────────────────────────
 # 1. HELPERS
 # ──────────────────────────────────────────────────────
@@ -59,7 +66,13 @@ def load_history() -> list[tuple[str, str]]:
 # ──────────────────────────────────────────────────────
 @st.cache_resource(show_spinner="⏳ Building / loading vector store …")
 def load_chain():
-    embeddings = OpenAIEmbeddings()
+    # Verify API key is available
+    if not os.getenv("OPENAI_API_KEY"):
+        st.error("OpenAI API key is not configured!")
+        return None, None
+        
+    try:
+        embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
 
     # ---------- build / load FAISS index ----------------
     if not os.path.exists(INDEX_DIR):
@@ -116,7 +129,7 @@ Answer:""",
         input_variables=["context", "input"]
     )
 
-    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0)
+    llm = ChatOpenAI(model_name="gpt-4o-mini", temperature=0, openai_api_key=os.getenv("OPENAI_API_KEY"))
 
     # Create the document chain
     combine_docs_chain = create_stuff_documents_chain(
@@ -131,6 +144,10 @@ Answer:""",
     )
     
     return qa_chain, vectorstore
+    
+    except Exception as e:
+        st.error(f"Error initializing chain: {str(e)}")
+        return None, None
 
 
 # Initialize the chain
@@ -141,6 +158,11 @@ chain, vectorstore = load_chain()
 # ──────────────────────────────────────────────────────
 st.set_page_config(page_title="City Ordinance Bot", page_icon="🏛️")
 st.title("🏛️ City Ordinance Reference Bot")
+
+# Check if chain initialized properly
+if chain is None:
+    st.error("Failed to initialize the application. Please check your configuration.")
+    st.stop()
 
 # ---------- sidebar -----------------------------------
 with st.sidebar:
