@@ -1,7 +1,7 @@
-python-dotenv==1.0.1
-streamlit==1.38.0
-streamlit-extras==0.4.3
-openai==1.35.3
+python-dotenv==1.1.0
+streamlit==1.45.0
+streamlit-extras==0.7.1
+openai==1.32.4         
 tiktoken==0.7.0
 langchain==0.2.11
 langchain-community==0.2.10
