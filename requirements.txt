@@ -1,16 +1,11 @@
-streamlit
-requests
-beautifulsoup4
-pandas
-python-dotenv
-pypdf
-tiktoken
- faiss‑cpu==1.7.4
-langchain==0.1.6
+python-dotenv==1.0.1
+streamlit==1.34.0
+openai==1.30.1
+tiktoken==0.6.0
+langchain==0.2.1
+langchain-community==0.0.21
 langchain-openai==0.1.1
-langchain‑community==0.0.15
-openai
-supabase==1.*
-geoip2
-stripe
-streamlit_extras
+faiss-cpu==1.7.4.post1
+chromadb==0.4.24
+pypdf==4.2.0
+rich==14.1.2
