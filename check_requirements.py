@@ -35,7 +35,7 @@ def check_requirements():
 
 streamlit==1.45.0
 streamlit-extras==0.7.1
-openai==1.32.4         
+openai>=1.32,<1.40         
 tiktoken==0.7.0
 langchain==0.2.11
 langchain-community==0.2.10
