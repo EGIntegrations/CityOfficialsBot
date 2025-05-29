@@ -33,7 +33,6 @@ def check_requirements():
             
             clean_content = """python-dotenv==1.0.1
 
-python==3.11.7
 streamlit==1.33.0
 streamlit-extras
 langchain==0.1.17
