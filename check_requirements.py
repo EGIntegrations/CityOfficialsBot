@@ -44,6 +44,7 @@ faiss-cpu==1.8.0
 pypdf==4.2.0
 geoip2==4.8.0
 rich==13.7.1
+numpy==1.26.4
             
             with open('requirements_clean.txt', 'w', encoding='utf-8') as f:
                 f.write(clean_content)
