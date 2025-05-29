@@ -37,8 +37,7 @@ streamlit==1.33.0
 streamlit-extras
 langchain==0.1.17
 langchain-openai==0.0.8
-langchain-community
-openai==1.6.1
+openai==1.10.0
 faiss-cpu==1.8.0
 PyPDF==4.0.2
 tiktoken==0.5.2
