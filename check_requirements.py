@@ -39,7 +39,7 @@ openai==1.39.0
 tiktoken==0.7.0
 langchain==0.2.11
 langchain-community==0.2.10
-langchain-openai==0.1.27
+langchain-openai==0.1.20
 faiss-cpu==1.8.0
 pypdf==4.2.0
 geoip2==4.8.0
