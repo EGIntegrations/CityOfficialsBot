@@ -33,15 +33,17 @@ def check_requirements():
             
             clean_content = """python-dotenv==1.0.1
 
-streamlit==1.33.0
-streamlit-extras
-langchain==0.1.17
-langchain-openai==0.0.8
-openai==1.10.0
-faiss-cpu==1.8.0
-PyPDF==4.0.2
-tiktoken==0.5.2
-geoip2
+streamlit==1.45.0
+streamlit-extras==0.7.1
+langchain==0.3.25
+langchain-openai==0.3.19
+langchain-community==0.3.24
+langchain-text-splitters==0.3.8
+openai==1.84.0
+tiktoken==0.9.0
+faiss-cpu==1.11.0
+pypdf==5.6.0
+geoip2==5.1.0    
             
             with open('requirements_clean.txt', 'w', encoding='utf-8') as f:
                 f.write(clean_content)
