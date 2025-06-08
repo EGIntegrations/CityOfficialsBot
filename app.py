@@ -84,6 +84,8 @@ def load_chain():
             os.makedirs(DATA_DIR, exist_ok=True)
             os.makedirs(INDEX_DIR, exist_ok=True)
             
+            st.write("📂 PDF files found in ordinances directory:", os.listdir(DATA_DIR))  # <--- DEBUG
+
             docs = []
             for pdf in os.listdir(DATA_DIR):
                 if not pdf.endswith(".pdf"):
@@ -91,7 +93,9 @@ def load_chain():
                 city_name = pdf.removesuffix(".pdf").lower()
 
                 loader = PyPDFLoader(str(Path(DATA_DIR) / pdf))
-                for d in loader.load():
+                loaded_docs = loader.load()
+                st.write(f"📄 {pdf}: loaded {len(loaded_docs)} pages")  # <--- DEBUG
+                for d in loaded_docs:
                     d.metadata.update(
                         source_file=pdf,
                         timestamp="2024-01-01",
@@ -99,19 +103,24 @@ def load_chain():
                     )
                     docs.append(d)
 
+            st.write("📝 Total docs loaded from all PDFs:", len(docs))  # <--- DEBUG
+
             if docs:
                 chunks = RecursiveCharacterTextSplitter(
                     chunk_size=1_000, chunk_overlap=150
                 ).split_documents(docs)
+                st.write("🔪 Chunks created:", len(chunks))  # <--- DEBUG
                 vectorstore = FAISS.from_documents(chunks, embeddings)
+                st.write("📦 Vectorstore created! Number of vectors:", vectorstore.index.ntotal)  # <--- DEBUG
                 vectorstore.save_local(INDEX_DIR)
             else:
-                # Create empty vectorstore if no documents
-                st.warning("No PDF files found in ordinances directory. Please upload some PDFs.")
+                st.warning("No PDF files found or parsed from ordinances directory. Please upload some PDFs or check PDF contents.")
                 vectorstore = FAISS.from_texts(["placeholder"], embeddings)
         else:
             # Load existing index
             vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
+            st.write("✅ Loaded FAISS index from disk. Number of vectors:", vectorstore.index.ntotal)  # <--- DEBUG
+            
 
         # ---------- prompt & chain wiring -------------------
         QA_PROMPT = PromptTemplate(
