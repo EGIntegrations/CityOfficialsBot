@@ -3,6 +3,7 @@
 import os, pickle
 from pathlib import Path
 import streamlit as st
+import random
 
 # MUST BE FIRST STREAMLIT COMMAND
 st.set_page_config(page_title="City Ordinance Bot", page_icon="🏛️")
@@ -19,6 +20,18 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 # **new‑style chain objects**
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
+
+
+FAISS_INDEX_PATH = "faiss_index/index.faiss"
+FAISS_INDEX_URL = "https://drive.google.com/drive/folders/1I6nh6-vNcnw2lnH1pqwChHZfDD1XlNRK?usp=sharing"
+
+if not os.path.exists(FAISS_INDEX_PATH):
+    print("Downloading FAISS index...")
+    os.makedirs("faiss_index", exist_ok=True)
+    r = requests.get(FAISS_INDEX_URL)
+    with open(FAISS_INDEX_PATH, "wb") as f:
+        f.write(r.content)
+
 
 # ──────────────────────────────────────────────────────
 # 0. ENV / CONFIG
