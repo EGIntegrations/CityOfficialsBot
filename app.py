@@ -4,6 +4,7 @@ import os, pickle
 from pathlib import Path
 import streamlit as st
 import random
+import requests
 
 # MUST BE FIRST STREAMLIT COMMAND
 st.set_page_config(page_title="City Ordinance Bot", page_icon="🏛️")
