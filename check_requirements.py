@@ -44,6 +44,7 @@ tiktoken==0.9.0
 faiss-cpu==1.11.0
 pypdf==5.6.0
 geoip2==5.1.0    
+requests
             
             with open('requirements_clean.txt', 'w', encoding='utf-8') as f:
                 f.write(clean_content)
