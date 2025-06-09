@@ -24,7 +24,7 @@ from langchain.chains import create_retrieval_chain
 
 
 FAISS_INDEX_PATH = "faiss_index/index.faiss"
-FAISS_INDEX_URL = "https://drive.google.com/drive/folders/1I6nh6-vNcnw2lnH1pqwChHZfDD1XlNRK?usp=sharing"
+FAISS_INDEX_URL = "https://drive.google.com/uc?export=download&id=1lrqq2I6GcEkFAOrEyYe1uYSLUZ-oCtNv"
 
 if not os.path.exists(FAISS_INDEX_PATH):
     print("Downloading FAISS index...")
