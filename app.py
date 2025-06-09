@@ -5,6 +5,8 @@ from pathlib import Path
 import streamlit as st
 import random
 import requests
+import zipfile
+import tempfile
 
 # MUST BE FIRST STREAMLIT COMMAND
 st.set_page_config(page_title="City Ordinance Bot", page_icon="🏛️")
@@ -23,15 +25,54 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
 
 
-FAISS_INDEX_PATH = "faiss_index/index.faiss"
-FAISS_INDEX_URL = "https://drive.google.com/uc?export=download&id=1lrqq2I6GcEkFAOrEyYe1uYSLUZ-oCtNv"
+# Updated to use a zip file containing both .faiss and .pkl files
+FAISS_INDEX_DIR = "faiss_index"
+FAISS_ZIP_URL = "https://drive.google.com/uc?export=download&id=YOUR_ZIP_FILE_ID"
 
-if not os.path.exists(FAISS_INDEX_PATH):
-    print("Downloading FAISS index...")
-    os.makedirs("faiss_index", exist_ok=True)
-    r = requests.get(FAISS_INDEX_URL)
-    with open(FAISS_INDEX_PATH, "wb") as f:
-        f.write(r.content)
+def download_and_extract_faiss_index():
+    """Download and extract FAISS index from Google Drive zip file."""
+    if os.path.exists(FAISS_INDEX_DIR) and os.listdir(FAISS_INDEX_DIR):
+        print("FAISS index directory already exists and is not empty.")
+        return
+    
+    print("Downloading FAISS index zip file...")
+    os.makedirs(FAISS_INDEX_DIR, exist_ok=True)
+    
+    try:
+        # Download the zip file
+        response = requests.get(FAISS_ZIP_URL, stream=True)
+        response.raise_for_status()
+        
+        # Check if we got HTML instead of a zip file
+        content_type = response.headers.get('content-type', '')
+        if 'text/html' in content_type:
+            raise ValueError("Received HTML page instead of zip file. Check your Google Drive sharing settings.")
+        
+        # Save and extract zip file
+        with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp_file:
+            for chunk in response.iter_content(chunk_size=8192):
+                tmp_file.write(chunk)
+            tmp_path = tmp_file.name
+        
+        # Extract zip file
+        with zipfile.ZipFile(tmp_path, 'r') as zip_ref:
+            zip_ref.extractall(FAISS_INDEX_DIR)
+        
+        # Clean up temp file
+        os.unlink(tmp_path)
+        
+        print(f"FAISS index extracted to {FAISS_INDEX_DIR}")
+        print("Files in index directory:", os.listdir(FAISS_INDEX_DIR))
+        
+    except Exception as e:
+        print(f"Error downloading FAISS index: {e}")
+        # If download fails, we'll build the index from scratch
+        return False
+    
+    return True
+
+# Try to download the index, if it fails we'll build from scratch
+download_and_extract_faiss_index()
 
 
 # ──────────────────────────────────────────────────────
@@ -93,48 +134,26 @@ def load_chain():
         embeddings = OpenAIEmbeddings()
 
         # ---------- build / load FAISS index ----------------
-        if not os.path.exists(INDEX_DIR):
-            # Create directories if they don't exist
-            os.makedirs(DATA_DIR, exist_ok=True)
-            os.makedirs(INDEX_DIR, exist_ok=True)
-            
-            st.write("📂 PDF files found in ordinances directory:", os.listdir(DATA_DIR))  # <--- DEBUG
-
-            docs = []
-            for pdf in os.listdir(DATA_DIR):
-                if not pdf.endswith(".pdf"):
-                    continue
-                city_name = pdf.removesuffix(".pdf").lower()
-
-                loader = PyPDFLoader(str(Path(DATA_DIR) / pdf))
-                loaded_docs = loader.load()
-                st.write(f"📄 {pdf}: loaded {len(loaded_docs)} pages")  # <--- DEBUG
-                for d in loaded_docs:
-                    d.metadata.update(
-                        source_file=pdf,
-                        timestamp="2024-01-01",
-                        city=city_name,
-                    )
-                    docs.append(d)
-
-            st.write("📝 Total docs loaded from all PDFs:", len(docs))  # <--- DEBUG
-
-            if docs:
-                chunks = RecursiveCharacterTextSplitter(
-                    chunk_size=1_000, chunk_overlap=150
-                ).split_documents(docs)
-                st.write("🔪 Chunks created:", len(chunks))  # <--- DEBUG
-                vectorstore = FAISS.from_documents(chunks, embeddings)
-                st.write("📦 Vectorstore created! Number of vectors:", vectorstore.index.ntotal)  # <--- DEBUG
-                vectorstore.save_local(INDEX_DIR)
-            else:
-                st.warning("No PDF files found or parsed from ordinances directory. Please upload some PDFs or check PDF contents.")
-                vectorstore = FAISS.from_texts(["placeholder"], embeddings)
+        # Check if we have a valid FAISS index
+        faiss_file = Path(INDEX_DIR) / "index.faiss"
+        pkl_file = Path(INDEX_DIR) / "index.pkl"
+        
+        if faiss_file.exists() and pkl_file.exists():
+            try:
+                # Try to load existing index
+                vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
+                st.write("✅ Loaded FAISS index from disk. Number of vectors:", vectorstore.index.ntotal)
+            except Exception as e:
+                st.warning(f"Failed to load existing index: {e}")
+                st.write("Building new index from PDFs...")
+                vectorstore = build_index_from_pdfs(embeddings)
         else:
-            # Load existing index
-            vectorstore = FAISS.load_local(INDEX_DIR, embeddings, allow_dangerous_deserialization=True)
-            st.write("✅ Loaded FAISS index from disk. Number of vectors:", vectorstore.index.ntotal)  # <--- DEBUG
-            
+            st.write("No valid FAISS index found. Building from PDFs...")
+            vectorstore = build_index_from_pdfs(embeddings)
+
+        if vectorstore is None:
+            st.error("Failed to create or load vector store")
+            return None, None
 
         # ---------- prompt & chain wiring -------------------
         QA_PROMPT = PromptTemplate(
@@ -178,6 +197,62 @@ Answer:""",
         import traceback
         st.error(traceback.format_exc())
         return None, None
+
+
+def build_index_from_pdfs(embeddings):
+    """Build FAISS index from PDF files."""
+    # Create directories if they don't exist
+    os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(INDEX_DIR, exist_ok=True)
+    
+    if not os.path.exists(DATA_DIR) or not os.listdir(DATA_DIR):
+        st.warning("No PDF files found in ordinances directory. Please upload some PDFs.")
+        # Create a dummy index to prevent errors
+        return FAISS.from_texts(["Please upload PDF files to get started."], embeddings)
+    
+    st.write("📂 PDF files found in ordinances directory:", os.listdir(DATA_DIR))
+
+    docs = []
+    for pdf in os.listdir(DATA_DIR):
+        if not pdf.endswith(".pdf"):
+            continue
+        city_name = pdf.removesuffix(".pdf").lower()
+
+        try:
+            loader = PyPDFLoader(str(Path(DATA_DIR) / pdf))
+            loaded_docs = loader.load()
+            st.write(f"📄 {pdf}: loaded {len(loaded_docs)} pages")
+            for d in loaded_docs:
+                d.metadata.update(
+                    source_file=pdf,
+                    timestamp="2024-01-01",
+                    city=city_name,
+                )
+                docs.append(d)
+        except Exception as e:
+            st.warning(f"Failed to load {pdf}: {e}")
+
+    st.write("📝 Total docs loaded from all PDFs:", len(docs))
+
+    if docs:
+        chunks = RecursiveCharacterTextSplitter(
+            chunk_size=1_000, chunk_overlap=150
+        ).split_documents(docs)
+        st.write("🔪 Chunks created:", len(chunks))
+        vectorstore = FAISS.from_documents(chunks, embeddings)
+        st.write("📦 Vectorstore created! Number of vectors:", vectorstore.index.ntotal)
+        
+        # Save the index
+        try:
+            vectorstore.save_local(INDEX_DIR)
+            st.write("💾 FAISS index saved successfully")
+        except Exception as e:
+            st.warning(f"Failed to save index: {e}")
+        
+        return vectorstore
+    else:
+        st.warning("No valid PDF content found. Creating dummy index.")
+        return FAISS.from_texts(["Please upload valid PDF files."], embeddings)
 
 
 # Initialize the chain
