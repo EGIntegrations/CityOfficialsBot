@@ -27,7 +27,7 @@ from langchain.chains import create_retrieval_chain
 
 # Updated to use a zip file containing both .faiss and .pkl files
 FAISS_INDEX_DIR = "faiss_index"
-FAISS_ZIP_URL = "https://drive.google.com/uc?export=download&id=YOUR_ZIP_FILE_ID"
+FAISS_ZIP_URL = "https://drive.google.com/file/d/1Akx96C3Wel41n_omWfsDGrfNff8RudYm/view?usp=share_link"
 
 def download_and_extract_faiss_index():
     """Download and extract FAISS index from Google Drive zip file."""
